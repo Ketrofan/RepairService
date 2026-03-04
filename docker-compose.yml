@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    volumes:
+      - .:/var/www
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: repair_service
+      DB_USERNAME: repair
+      DB_PASSWORD: repair
+
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/www/vendor/autoload.php"]
+      interval: 5s
+      timeout: 3s
+      retries: 120
+      start_period: 5m
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: repair_service
+      MYSQL_USER: repair
+      MYSQL_PASSWORD: repair
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+
+volumes:
+  mysql_data:
