@@ -14,13 +14,6 @@ services:
       APP_DEBUG: "true"
       APP_URL: http://localhost:8000
 
-      DB_CONNECTION: mysql
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_DATABASE: repair_service
-      DB_USERNAME: repair
-      DB_PASSWORD: repair
-
     healthcheck:
       test: ["CMD-SHELL", "test -f /var/www/vendor/autoload.php"]
       interval: 5s
@@ -40,7 +33,6 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-
 
 volumes:
   mysql_data:

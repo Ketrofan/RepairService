@@ -25,26 +25,30 @@ Repair Service — “Заявки в ремонтную службу” (Larave
    cd <repo>
 
 1) Поднять контейнеры
+```bash
    docker compose up -d --build
-
+```
    Если сборка падает из-за Docker Hub (например TLS handshake timeout), попробуй:
+```bash
    export DOCKER_CLIENT_TIMEOUT=300
    export COMPOSE_HTTP_TIMEOUT=300
    docker compose build --no-cache
    docker compose up -d
-
+```
 2) Дождаться готовности приложения (первый запуск)
    При первом запуске контейнер app может устанавливать зависимости Composer (создаёт vendor/).
    Посмотреть прогресс:
+``` bash
    docker compose logs -f app
-
+```
    Когда в логах появится строка:
    READY: You can now run migrations
    — можно запускать миграции.
 
 3) Подготовить БД (миграции + сиды)
+```bash
    docker compose exec app php artisan migrate:fresh --seed
-
+```
 4) Открыть приложение
    http://localhost:8000
 
@@ -122,9 +126,14 @@ Master:
 4) Запомнить ID заявки (например #2)
 
 Запуск:
+```bash
 chmod +x race_test.sh
 REQUEST_ID=2 ./race_test.sh
-
+```
+Windows CMD
+```bash
+docker compose exec app bash -lc "REQUEST_ID=2 ./race_test.sh"
+```
 Ожидаемо:
 - один запрос: HTTP: 200
 - второй запрос: HTTP: 409
@@ -136,8 +145,9 @@ REQUEST_ID=2 ./race_test.sh
 --------------------------------------------------------------------------
 Автотесты
 --------------------------------------------------------------------------
+```bash
 docker compose exec app php artisan test
-
+```
 Что проверяют ключевые тесты:
 - DispatcherAssignMasterTest — диспетчер назначает мастера на новую заявку (new → assigned)
 - MasterTakeInWorkRaceTest — повторный “take” возвращает 409 (защита)

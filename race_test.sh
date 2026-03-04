@@ -11,47 +11,31 @@ fi
 COOKIE_JAR="$(mktemp)"
 LOGIN_HTML="$(mktemp)"
 MASTER_HTML="$(mktemp)"
-trap 'rm -f "$COOKIE_JAR" "$LOGIN_HTML" "$MASTER_HTML"' EXIT
+trap 'rm -f "$COOKIE_JAR" "$LOGIN_HTML" "$MASTER_HTML" codeA.txt codeB.txt bodyA.json bodyB.json' EXIT
 
 echo "==> 1) GET /login (получаем HTML с CSRF токеном + cookies)"
 GET_CODE=$(curl -sS --max-time 15 --connect-timeout 7 \
   -c "$COOKIE_JAR" \
   -X GET "$BASE_URL/login" \
   -o "$LOGIN_HTML" -w "%{http_code}")
-
 echo "GET /login HTTP: $GET_CODE"
-if [ "$GET_CODE" != "200" ]; then
-  echo "ERROR: /login не 200. Проверь доступность $BASE_URL"
-  exit 1
-fi
+[ "$GET_CODE" = "200" ] || { echo "ERROR: /login not 200"; exit 1; }
 
 echo "==> 2) Парсим CSRF token из HTML формы логина"
 LOGIN_TOKEN=$(grep -o 'name="_token" value="[^"]*"' "$LOGIN_HTML" | head -n 1 | sed 's/.*value="//;s/"$//')
-
-if [ -z "${LOGIN_TOKEN:-}" ]; then
-  echo "ERROR: не нашли _token в HTML /login"
-  echo "---- login html head ----"
-  sed -n '1,120p' "$LOGIN_HTML"
-  echo "-------------------------"
-  exit 1
-fi
-
+[ -n "${LOGIN_TOKEN:-}" ] || { echo "ERROR: CSRF token not found"; exit 1; }
 echo "CSRF(login) length: ${#LOGIN_TOKEN}"
 
-echo "==> 3) POST /login с _token (ожидаемо 302)"
+echo "==> 3) POST /login с _token (ожидаемо 302/200)"
 POST_CODE=$(curl -sS --max-time 15 --connect-timeout 7 \
   -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -X POST "$BASE_URL/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data "email=master1@example.com&password=password&_token=$LOGIN_TOKEN" \
   -o /dev/null -w "%{http_code}")
-
 echo "POST /login HTTP: $POST_CODE"
 if [ "$POST_CODE" != "302" ] && [ "$POST_CODE" != "200" ]; then
-  echo "ERROR: login не прошёл (ожидали 302/200)."
-  echo "---- cookie jar dump ----"
-  sed -n '1,200p' "$COOKIE_JAR"
-  echo "-------------------------"
+  echo "ERROR: login failed (expected 302/200)"
   exit 1
 fi
 
@@ -60,55 +44,57 @@ MASTER_CODE=$(curl -sS --max-time 15 --connect-timeout 7 \
   -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -X GET "$BASE_URL/master/requests" \
   -o "$MASTER_HTML" -w "%{http_code}")
-
 echo "GET /master/requests HTTP: $MASTER_CODE"
-if [ "$MASTER_CODE" != "200" ]; then
-  echo "ERROR: мастерская панель не 200. Возможно, логин не мастер/сессия не сохранилась."
-  echo "---- master html head ----"
-  sed -n '1,120p' "$MASTER_HTML"
-  echo "--------------------------"
-  exit 1
-fi
+[ "$MASTER_CODE" = "200" ] || { echo "ERROR: /master/requests not 200"; exit 1; }
 
 MASTER_TOKEN=$(grep -o 'name="_token" value="[^"]*"' "$MASTER_HTML" | head -n 1 | sed 's/.*value="//;s/"$//')
-if [ -z "${MASTER_TOKEN:-}" ]; then
-  # fallback на login token
-  MASTER_TOKEN="$LOGIN_TOKEN"
-fi
-
+[ -n "${MASTER_TOKEN:-}" ] || MASTER_TOKEN="$LOGIN_TOKEN"
 echo "CSRF(master) length: ${#MASTER_TOKEN}"
 
-echo "==> 5) 2 параллельных take для REQUEST_ID=$REQUEST_ID (ожидаемо: один 200, второй 409)"
+echo "==> 5) 2 параллельных take для REQUEST_ID=$REQUEST_ID"
 echo
 
 run_take () {
   local label="$1"
-  local tmp_body
-  tmp_body="$(mktemp)"
+  local bodyfile="$2"
+  local codefile="$3"
 
-  local code
   code=$(curl -sS --max-time 15 --connect-timeout 7 \
     -b "$COOKIE_JAR" \
     -X POST "$BASE_URL/master/requests/$REQUEST_ID/take" \
     -H "Accept: application/json" \
     -H "X-CSRF-TOKEN: $MASTER_TOKEN" \
     --data "" \
-    -o "$tmp_body" -w "%{http_code}")
+    -o "$bodyfile" -w "%{http_code}")
+
+  echo "$code" > "$codefile"
 
   echo "---- request $label ----"
   echo "HTTP: $code"
   echo "BODY:"
-  cat "$tmp_body"
+  cat "$bodyfile"
   echo
-  rm -f "$tmp_body"
 }
 
-run_take "A" &
+run_take "A" "bodyA.json" "codeA.txt" &
 PID1=$!
-run_take "B" &
+run_take "B" "bodyB.json" "codeB.txt" &
 PID2=$!
 
 wait $PID1 || true
 wait $PID2 || true
 
-echo "DONE. Корректно: ровно один HTTP: 200 и ровно один HTTP: 409."
+CODE_A="$(cat codeA.txt 2>/dev/null || echo "")"
+CODE_B="$(cat codeB.txt 2>/dev/null || echo "")"
+
+echo "SUMMARY: A=$CODE_A, B=$CODE_B"
+
+# Нормализуем (порядок не важен)
+if { [ "$CODE_A" = "200" ] && [ "$CODE_B" = "409" ]; } || { [ "$CODE_A" = "409" ] && [ "$CODE_B" = "200" ]; }; then
+  echo "OK: got 200 + 409 (race protection works)"
+elif [ "$CODE_A" = "409" ] && [ "$CODE_B" = "409" ]; then
+  echo "OK: got 409 + 409 (request already taken / not in assigned state)"
+else
+  echo "WARN: unexpected codes (expected 200+409 on first run, or 409+409 on repeat run)"
+  exit 2
+fi
