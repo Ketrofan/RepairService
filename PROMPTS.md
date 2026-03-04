@@ -221,7 +221,7 @@ failed to solve: composer:2: failed to resolve source metadata for docker.io/lib
 
 ---
 
-### 04.03.2026 117:23 
+### 04.03.2026 17:23 
 **User request (full):**
 Нужно исправить вывод done при выполении теста docker compose exec app bash -lc "REQUEST_ID=2 ./race_test.sh", если повторно вызвать тест с тем же id, done выводится не корректно, он остается таким же как и при успешном выполоении
 
