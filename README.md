@@ -21,12 +21,17 @@ Repair Service — “Заявки в ремонтную службу” (Larave
 Команды выполняются в терминале в корне проекта (там, где docker-compose.yml).
 
 0) Склонировать репозиторий
+```bash
    git clone <repo>
    cd <repo>
-
+```
 1) Поднять контейнеры
 ```bash
    docker compose up -d --build
+```
+   Усли сборка была собрана успешно
+```bash
+   docker compose up -d
 ```
    Если сборка падает из-за Docker Hub (например TLS handshake timeout), попробуй:
 ```bash
